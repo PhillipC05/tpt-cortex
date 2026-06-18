@@ -2,27 +2,26 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { CortexClient, type ConnectionState, type ExecuteResult } from '$lib/cortex-client';
 
-	// ── Shared connState ──────────────────────────────────────────────────────────
-	let connState: ConnectionState = $connState('disconnected');
+	let connState: ConnectionState = $state('disconnected');
 	let client: CortexClient;
-	let running = $connState(false);
-	let error = $connState('');
-	let output = $connState('');
+	let running = $state(false);
+	let error = $state('');
+	let output = $state('');
 
 	// ── File demo ─────────────────────────────────────────────────────────────
-	let filePath = $connState('C:/Users/Phillip/test.txt');
+	let filePath = $state('C:/Users/Phillip/test.txt');
 
 	// ── GPS Timesheet ─────────────────────────────────────────────────────────
 	type LocationEntry = { lat: number; lng: number; acc: number; ts: string };
 	type SyncStatus = 'idle' | 'syncing' | 'synced';
-	let gpsTracking = $connState(false);
-	let gpsEntries = $connState([] as LocationEntry[]);
-	let gpsOutput = $connState('');
-	let gpsError = $connState('');
-	let watchId = $connState(null as number | null);
-	let bgScheduled = $connState(false);
-	let onlineStatus = $connState(true);
-	let syncStatus = $connState('idle' as SyncStatus);
+	let gpsTracking = $state(false);
+	let gpsEntries = $state([] as LocationEntry[]);
+	let gpsOutput = $state('');
+	let gpsError = $state('');
+	let watchId = $state(null as number | null);
+	let bgScheduled = $state(false);
+	let onlineStatus = $state(true);
+	let syncStatus = $state('idle' as SyncStatus);
 
 	onMount(() => {
 		client = new CortexClient((s) => { connState = s; });
@@ -210,6 +209,9 @@
 			<span class="logo-icon">⬡</span>
 			<span class="logo-text">TPT Cortex</span>
 		</div>
+		<nav class="header-nav">
+			<a href="/nodes" class="nav-link">Node Editor</a>
+		</nav>
 		<div class="status" class:connected={connState === 'connected'} class:connecting={connState === 'connecting'}>
 			<span class="dot"></span>
 			{connState === 'connected' ? 'Core connected' : connState === 'connecting' ? 'Connecting…' : 'Core not detected'}
@@ -369,6 +371,15 @@
 	.logo { display: flex; align-items: center; gap: 0.5rem; }
 	.logo-icon { font-size: 1.5rem; }
 	.logo-text { font-size: 1.2rem; font-weight: 700; letter-spacing: -0.02em; color: #fff; }
+
+	.header-nav { display: flex; align-items: center; gap: 0.75rem; flex: 1; justify-content: center; }
+	.nav-link {
+		font-size: 0.82rem; font-weight: 500; color: #9090a0;
+		text-decoration: none; padding: 0.3rem 0.7rem;
+		border-radius: 6px; border: 1px solid #1e1e26;
+		transition: color 0.15s, border-color 0.15s;
+	}
+	.nav-link:hover { color: #e2e2e6; border-color: #6366f1; }
 
 	.status {
 		display: flex; align-items: center; gap: 0.4rem;

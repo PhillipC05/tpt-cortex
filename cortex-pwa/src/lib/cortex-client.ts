@@ -1,113 +1,145 @@
-const DAEMON_URL = 'ws://127.0.0.1:9911';
-const TOKEN_KEY = 'cortex_daemon_token';
+/**
+ * Typed WebSocket client for the Cortex daemon.
+ *
+ * Protocol (matches cortex-daemon/ipc/protocol.go):
+ *   1. On connect, server sends: { type: "connected", token: string }
+ *   2. Client sends JSON-RPC: { jsonrpc, method: "ExecuteCortex", params, id, token }
+ *   3. Server responds:       { jsonrpc, id, result: { logs } | error: { code, message } }
+ */
 
-export type ExecuteResult = { logs: string[] };
 export type ConnectionState = 'disconnected' | 'connecting' | 'connected';
 
-type PendingRequest = {
-	resolve: (result: ExecuteResult) => void;
-	reject: (err: Error) => void;
+export interface ExecuteResult {
+	logs: string[];
+}
+
+interface ConnectedMsg {
+	type: 'connected';
+	token: string;
+}
+
+interface RPCResponse {
+	jsonrpc: '2.0';
+	id: number;
+	result?: ExecuteResult;
+	error?: { code: number; message: string };
+}
+
+type PendingCall = {
+	resolve: (r: ExecuteResult) => void;
+	reject: (e: Error) => void;
 };
 
 export class CortexClient {
 	private ws: WebSocket | null = null;
-	private token: string | null = null;
-	private state: ConnectionState = 'disconnected';
-	private pending = new Map<number, PendingRequest>();
+	private token = '';
 	private nextId = 1;
-	private onStateChange?: (s: ConnectionState) => void;
+	private pending = new Map<number, PendingCall>();
+	private onState: (s: ConnectionState) => void;
+	private url: string;
 
-	constructor(onStateChange?: (s: ConnectionState) => void) {
-		this.onStateChange = onStateChange;
+	constructor(onStateChange: (s: ConnectionState) => void, url = 'ws://127.0.0.1:9911/ws') {
+		this.onState = onStateChange;
+		this.url = url;
 	}
 
-	get connectionState(): ConnectionState {
-		return this.state;
-	}
-
-	/** Attempt to connect to the local daemon. Resolves when connected, rejects if unreachable. */
 	connect(): Promise<void> {
+		if (this.ws) return Promise.resolve();
+
 		return new Promise((resolve, reject) => {
-			if (this.state === 'connected') { resolve(); return; }
+			this.onState('connecting');
+			const ws = new WebSocket(this.url);
+			this.ws = ws;
 
-			this.setState('connecting');
-			const ws = new WebSocket(DAEMON_URL);
-			let settled = false;
+			const timeout = setTimeout(() => {
+				ws.close();
+				reject(new Error('Connection timeout'));
+			}, 6000);
 
-			ws.onopen = () => {
-				// Wait for the "connected" message with the token before resolving
-			};
-
-			ws.onmessage = (event) => {
-				let msg: Record<string, unknown>;
-				try { msg = JSON.parse(event.data); } catch { return; }
-
-				// First message: token handshake
-				if (msg.type === 'connected' && typeof msg.token === 'string') {
-					this.token = msg.token;
-					localStorage.setItem(TOKEN_KEY, msg.token);
-					this.ws = ws;
-					this.setState('connected');
-					if (!settled) { settled = true; resolve(); }
+			ws.onmessage = (ev) => {
+				let msg: ConnectedMsg | RPCResponse;
+				try {
+					msg = JSON.parse(ev.data as string);
+				} catch {
 					return;
 				}
 
-				// JSON-RPC response
-				const id = msg.id as number;
-				const req = this.pending.get(id);
-				if (!req) return;
-				this.pending.delete(id);
+				// Handshake
+				if ((msg as ConnectedMsg).type === 'connected') {
+					clearTimeout(timeout);
+					this.token = (msg as ConnectedMsg).token;
+					this.onState('connected');
+					resolve();
+					return;
+				}
 
-				if (msg.error) {
-					req.reject(new Error((msg.error as { message: string }).message));
+				// RPC response
+				const rpc = msg as RPCResponse;
+				const call = this.pending.get(rpc.id);
+				if (!call) return;
+				this.pending.delete(rpc.id);
+
+				if (rpc.error) {
+					call.reject(new Error(rpc.error.message));
 				} else {
-					req.resolve(msg.result as ExecuteResult);
+					call.resolve(rpc.result ?? { logs: [] });
 				}
 			};
 
 			ws.onerror = () => {
-				this.setState('disconnected');
-				if (!settled) { settled = true; reject(new Error('Cannot reach TPT Core daemon')); }
+				clearTimeout(timeout);
+				this.cleanup();
+				reject(new Error('WebSocket connection failed'));
 			};
 
 			ws.onclose = () => {
-				this.ws = null;
-				this.setState('disconnected');
-				// Reject all pending requests
-				for (const [, req] of this.pending) {
-					req.reject(new Error('Connection closed'));
-				}
-				this.pending.clear();
+				clearTimeout(timeout);
+				this.cleanup();
 			};
 		});
 	}
 
-	disconnect() {
-		this.ws?.close();
-		this.ws = null;
-	}
-
-	/** Execute a Cortex script on the daemon. */
-	execute(script: string, options: { allow?: string[] } = {}): Promise<ExecuteResult> {
-		if (!this.ws || this.state !== 'connected' || !this.token) {
-			return Promise.reject(new Error('Not connected to TPT Core'));
+	execute(script: string, opts: { allow?: string[] } = {}): Promise<ExecuteResult> {
+		if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+			return Promise.reject(new Error('Not connected to Cortex daemon'));
 		}
 
 		return new Promise((resolve, reject) => {
 			const id = this.nextId++;
 			this.pending.set(id, { resolve, reject });
-			this.ws!.send(JSON.stringify({
+
+			const msg = {
 				jsonrpc: '2.0',
 				method: 'ExecuteCortex',
-				params: { script, allow: options.allow ?? [] },
+				params: { script, allow: opts.allow ?? [] },
 				id,
 				token: this.token,
-			}));
+			};
+			this.ws!.send(JSON.stringify(msg));
+
+			// Per-call timeout (30 s)
+			setTimeout(() => {
+				if (this.pending.has(id)) {
+					this.pending.delete(id);
+					reject(new Error('Execution timed out'));
+				}
+			}, 30_000);
 		});
 	}
 
-	private setState(s: ConnectionState) {
-		this.state = s;
-		this.onStateChange?.(s);
+	disconnect() {
+		this.ws?.close();
+		this.cleanup();
+	}
+
+	private cleanup() {
+		this.ws = null;
+		this.token = '';
+		// Reject all in-flight calls
+		for (const [, call] of this.pending) {
+			call.reject(new Error('Disconnected'));
+		}
+		this.pending.clear();
+		this.onState('disconnected');
 	}
 }

@@ -23,9 +23,24 @@ pub fn compile_to_chunks(ast: &Program) -> Vec<compiler::Chunk> {
     compiler::compile_program(ast)
 }
 
+/// Phase 3: Encode compiled chunks to binary `.ctxb` format.
+pub fn encode_chunks(chunks: &[compiler::Chunk]) -> Vec<u8> {
+    compiler::encode_chunks(chunks)
+}
+
+/// Phase 3: Decode a `.ctxb` binary blob back into chunks.
+pub fn decode_chunks(data: &[u8]) -> Result<Vec<compiler::Chunk>, String> {
+    compiler::decode_chunks(data)
+}
+
 /// Post-MVP: Compile validated AST to WebAssembly Text Format (.wat).
 pub fn compile_to_wat(ast: &Program) -> String {
     wasm::compile_to_wat(ast)
+}
+
+/// Post-MVP: Compile validated AST to binary WebAssembly (.wasm).
+pub fn compile_to_wasm(ast: &Program) -> Result<Vec<u8>, String> {
+    wasm::compile_to_wasm(ast)
 }
 
 // ── LSP diagnostic API ────────────────────────────────────────────────────────

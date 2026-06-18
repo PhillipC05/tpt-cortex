@@ -15,7 +15,13 @@ import (
 	"github.com/tpt-cortex/cortex-daemon/manifest"
 	"github.com/tpt-cortex/cortex-daemon/scheduler"
 	"github.com/tpt-cortex/cortex-daemon/tray"
+	"github.com/tpt-cortex/cortex-daemon/updater"
 )
+
+// Version is stamped at build time via -ldflags "-X main.Version=v1.2.3".
+var Version = "dev"
+
+const githubRepo = "tpt-solutions/tpt-cortex"
 
 func main() {
 	addr := flag.String("addr", "127.0.0.1:9911", "WebSocket listen address")
@@ -23,7 +29,10 @@ func main() {
 	dbPath := flag.String("db", "", "SQLite database path (default: ~/.cortex/cortex.db)")
 	manifestPath := flag.String("manifest", "cortex.manifest.json", "Permission manifest path")
 	noTray := flag.Bool("no-tray", false, "Disable system tray icon")
+	noUpdate := flag.Bool("no-update-check", false, "Skip startup update check")
 	flag.Parse()
+
+	log.Printf("cortex-daemon %s", Version)
 
 	// ── Resolve cortex binary ─────────────────────────────────────────────
 	bin, err := resolveCortexBin(*cortexBin)

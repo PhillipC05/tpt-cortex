@@ -1,4 +1,5 @@
 use clap::{Parser, Subcommand, ValueEnum};
+use std::collections::HashSet;
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -23,7 +24,11 @@ enum Command {
         #[arg(long, value_delimiter = ',')]
         allow: Vec<String>,
 
-        /// Output file for binary bytecode (--emit=bytecode only)
+        /// Path to a cortex.manifest.json permission manifest file
+        #[arg(long)]
+        manifest: Option<PathBuf>,
+
+        /// Output file path (used with --emit=bytecode, --emit=wat, --emit=wasm)
         #[arg(short = 'o')]
         output: Option<PathBuf>,
     },
@@ -37,10 +42,74 @@ enum Command {
         #[arg(long, value_delimiter = ',')]
         allow: Vec<String>,
 
+        /// Path to a cortex.manifest.json permission manifest file
+        #[arg(long)]
+        manifest: Option<PathBuf>,
+
         /// Maximum VM op budget (default: 10000)
         #[arg(long, default_value = "10000")]
         ops_limit: u64,
     },
+}
+
+// ── Manifest JSON format (mirrors cortex.manifest.json) ──────────────────────
+
+#[derive(serde::Deserialize)]
+struct ManifestFile {
+    apps: std::collections::HashMap<String, ManifestApp>,
+}
+
+#[derive(serde::Deserialize)]
+struct ManifestApp {
+    #[serde(default)]
+    allow: Vec<String>,
+}
+
+/// Load a manifest JSON file and return the union of all allowed APIs across
+/// all origins. An empty `allow` list for any origin means "allow everything"
+/// for that origin, which causes the whole manifest to be treated as allow-all.
+fn load_manifest_file(path: &PathBuf) -> Result<Vec<String>, String> {
+    let data = std::fs::read_to_string(path)
+        .map_err(|e| format!("error: could not read manifest '{}': {}", path.display(), e))?;
+    let mf: ManifestFile = serde_json::from_str(&data)
+        .map_err(|e| format!("error: invalid manifest '{}': {}", path.display(), e))?;
+
+    let mut apis: HashSet<String> = HashSet::new();
+    for app in mf.apps.values() {
+        if app.allow.is_empty() {
+            // Empty allow list = allow all → return empty vec (allow-all sentinel)
+            return Ok(vec![]);
+        }
+        for api in &app.allow {
+            apis.insert(api.clone());
+        }
+    }
+    Ok(apis.into_iter().collect())
+}
+
+/// Build a PermissionManifest from `--allow` flags and an optional `--manifest` file.
+/// APIs from both sources are unioned together.
+fn build_permission_manifest(
+    allow: Vec<String>,
+    manifest_path: Option<&PathBuf>,
+) -> cortex_engine::checker::PermissionManifest {
+    let mut combined = allow;
+    if let Some(path) = manifest_path {
+        match load_manifest_file(path) {
+            Ok(apis) => {
+                if apis.is_empty() {
+                    // allow-all from manifest
+                    return cortex_engine::checker::PermissionManifest::allow_all();
+                }
+                combined.extend(apis);
+            }
+            Err(e) => {
+                eprintln!("{e}");
+                std::process::exit(1);
+            }
+        }
+    }
+    cortex_engine::checker::PermissionManifest::new(combined)
 }
 
 #[derive(Clone, ValueEnum)]
@@ -53,15 +122,17 @@ enum EmitFormat {
     Bytecode,
     /// WebAssembly Text Format (.wat)
     Wat,
+    /// Binary WebAssembly module (.wasm)
+    Wasm,
 }
 
 fn main() {
     let cli = Cli::parse();
 
     match cli.command {
-        Command::Compile { file, emit, allow, output } => {
+        Command::Compile { file, emit, allow, manifest: manifest_path, output } => {
             let source = read_file(&file);
-            let manifest = cortex_engine::checker::PermissionManifest::new(allow);
+            let manifest = build_permission_manifest(allow, manifest_path.as_ref());
 
             match cortex_engine::compile(&source, &manifest) {
                 Ok(ast) => match emit {
@@ -75,8 +146,18 @@ fn main() {
                         }
                     }
                     EmitFormat::Bytecode => {
-                        eprintln!("error: --emit=bytecode binary format is available in Phase 3");
-                        std::process::exit(1);
+                        let chunks = cortex_engine::compile_to_chunks(&ast);
+                        let bytes = cortex_engine::encode_chunks(&chunks);
+                        let path = output.unwrap_or_else(|| {
+                            let mut p = file.clone();
+                            p.set_extension("ctxb");
+                            p
+                        });
+                        if let Err(e) = std::fs::write(&path, &bytes) {
+                            eprintln!("error: could not write '{}': {}", path.display(), e);
+                            std::process::exit(1);
+                        }
+                        eprintln!("wrote {} bytes to '{}'", bytes.len(), path.display());
                     }
                     EmitFormat::Wat => {
                         let wat = cortex_engine::compile_to_wat(&ast);
@@ -90,6 +171,26 @@ fn main() {
                             }
                         }
                     }
+                    EmitFormat::Wasm => {
+                        match cortex_engine::compile_to_wasm(&ast) {
+                            Ok(bytes) => {
+                                let path = output.unwrap_or_else(|| {
+                                    let mut p = file.clone();
+                                    p.set_extension("wasm");
+                                    p
+                                });
+                                if let Err(e) = std::fs::write(&path, &bytes) {
+                                    eprintln!("error: could not write '{}': {}", path.display(), e);
+                                    std::process::exit(1);
+                                }
+                                eprintln!("wrote {} bytes to '{}'", bytes.len(), path.display());
+                            }
+                            Err(e) => {
+                                eprintln!("{e}");
+                                std::process::exit(1);
+                            }
+                        }
+                    }
                 },
                 Err(errors) => {
                     for e in &errors { eprintln!("{}", e); }
@@ -98,9 +199,9 @@ fn main() {
             }
         }
 
-        Command::Run { file, allow, ops_limit } => {
+        Command::Run { file, allow, manifest: manifest_path, ops_limit } => {
             let source = read_file(&file);
-            let manifest = cortex_engine::checker::PermissionManifest::new(allow);
+            let manifest = build_permission_manifest(allow, manifest_path.as_ref());
 
             let ast = match cortex_engine::compile(&source, &manifest) {
                 Ok(a) => a,

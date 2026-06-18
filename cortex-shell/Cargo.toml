@@ -2,6 +2,21 @@
 name = "cortex-shell"
 version = "0.1.0"
 edition = "2021"
-description = "TPT Cortex native WebView host (Phase 3)"
+description = "TPT Cortex native WebView host — wraps the Svelte PWA in a desktop window"
+
+[[bin]]
+name = "cortex-shell"
+path = "src/main.rs"
 
 [dependencies]
+# WRY provides the cross-platform WebView (uses WebView2 on Windows, WebKit on macOS/Linux).
+# Tao is WRY's bundled window-management layer (a fork of winit).
+wry = "0.35"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+# WebView2 loader — resolved automatically on Windows via the system-installed runtime.
+# No extra action needed; wry pulls this in transitively.
+
+[build-dependencies]
+# Needed on Windows to embed a manifest that opts into WebView2 DPI awareness.
+# (wry handles this internally; listed here for documentation purposes.)

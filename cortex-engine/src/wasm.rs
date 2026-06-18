@@ -84,16 +84,31 @@ impl ModuleCtx {
 pub fn compile_to_wat(program: &Program) -> String {
     let mut ctx = ModuleCtx::default();
 
+    // Build return-type map so call expressions resolve correctly (especially void tasks).
+    let task_types: HashMap<String, Option<Wt>> = program.tasks.iter()
+        .map(|t| (t.name.name.clone(), ty_to_wt(&t.return_ty.kind)))
+        .collect();
+
     let func_bodies: Vec<String> = program.tasks.iter()
-        .map(|task| compile_task(task, &mut ctx))
+        .map(|task| compile_task(task, &mut ctx, &task_types))
         .collect();
 
     build_module_string(&ctx, &func_bodies)
 }
 
+/// Compile a type-checked Cortex program to a binary `.wasm` module.
+///
+/// The WAT text is first generated, then assembled using the `wat` crate.
+/// Returns an error string if the generated WAT fails to parse (should not
+/// happen unless there is a bug in the WAT emitter).
+pub fn compile_to_wasm(program: &Program) -> Result<Vec<u8>, String> {
+    let text = compile_to_wat(program);
+    wat::parse_str(&text).map_err(|e| format!("wasm assembly error: {e}"))
+}
+
 // ── Task compilation ──────────────────────────────────────────────────────────
 
-fn compile_task(task: &Task, ctx: &mut ModuleCtx) -> String {
+fn compile_task(task: &Task, ctx: &mut ModuleCtx, task_types: &HashMap<String, Option<Wt>>) -> String {
     let name = &task.name.name;
 
     // WAT parameter list from Cortex params
@@ -120,7 +135,7 @@ fn compile_task(task: &Task, ctx: &mut ModuleCtx) -> String {
     }
 
     // Compile the body
-    let mut emitter = BodyEmitter { type_env, ctx, buf: String::new(), indent: 2 };
+    let mut emitter = BodyEmitter { type_env, task_types, ctx, buf: String::new(), indent: 2 };
     let body_clone = task.body.clone();
     emitter.compile_block(&body_clone);
 
@@ -177,10 +192,12 @@ fn collect_else_if_locals(s: &IfStmt, out: &mut Vec<(String, Wt)>, seen: &mut Ha
 // ── Body emitter ──────────────────────────────────────────────────────────────
 
 struct BodyEmitter<'a> {
-    type_env: HashMap<String, Wt>,
-    ctx:      &'a mut ModuleCtx,
-    buf:      String,
-    indent:   usize,
+    type_env:   HashMap<String, Wt>,
+    /// Return types of all user-defined tasks; `None` means void.
+    task_types: &'a HashMap<String, Option<Wt>>,
+    ctx:        &'a mut ModuleCtx,
+    buf:        String,
+    indent:     usize,
 }
 
 impl<'a> BodyEmitter<'a> {
@@ -340,8 +357,9 @@ impl<'a> BodyEmitter<'a> {
                 UnaryOp::Not => Some(Wt::I32),
                 UnaryOp::Neg => self.type_of_expr(&u.operand),
             },
-            // Native calls return i32 by default; user-defined calls return i32 placeholder
-            Expr::Call(_) | Expr::NativeCall(_) | Expr::Index(_) => Some(Wt::I32),
+            Expr::Call(c) => self.task_types.get(&c.callee.name).copied().flatten(),
+            // Native calls are declared as returning i32; host must conform.
+            Expr::NativeCall(_) | Expr::Index(_) => Some(Wt::I32),
         }
     }
 }

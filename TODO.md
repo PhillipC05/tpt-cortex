@@ -65,7 +65,7 @@
 - [x] Define `Chunk { instructions, string_table, native_table, local_names }`
 - [x] Implement `compile_program(ast: &Program) -> Vec<Chunk>` with backpatching for jumps
 - [x] Text bytecode emitter (`--emit=asm` → human-readable listing with comments)
-- [ ] Binary bytecode writer (`-o out.ctxb`) — deferred to Phase 3
+- [x] Binary bytecode writer (`-o out.ctxb`) — `cortex compile <file> --emit=bytecode`
 
 ### VM (`cortex-engine/src/vm/`)
 - [x] Implement value stack (`Vec<Value>`)
@@ -98,12 +98,12 @@
   - [x] `native.fs.read` → `os.ReadFile`
   - [x] `native.notify` → desktop notification (`beeep`)
 - [x] Call `cortex-engine` binary as subprocess (AST interpreter approach — no CGo)
-- [ ] Unit tests for IPC message parsing and registry dispatch
+- [x] Unit tests for IPC message parsing and registry dispatch
 
 ### Rust Shell (`cortex-shell/`)
-- [ ] Set up Tauri WRY crate for cross-platform WebView
-- [ ] Embed the Svelte PWA bundle into the shell
-- [ ] Pass WebSocket traffic through to the Go daemon on loopback
+- [x] Set up Tauri WRY crate for cross-platform WebView
+- [x] Embed the Svelte PWA bundle into the shell (runtime: dist/index.html, fallback placeholder)
+- [x] Pass WebSocket traffic through to the Go daemon on loopback (WebView handles WS directly)
 
 ### Svelte PWA (`cortex-pwa/`)
 - [x] Scaffold with `vite` + `@sveltejs/kit` + TypeScript
@@ -134,7 +134,7 @@
 - [x] Define `cortex.manifest.json` schema (allowed APIs per app origin) — see `cortex.manifest.json`
 - [x] Load manifest at daemon startup (`manifest/manifest.go`, `--manifest` flag)
 - [x] Enforce at runtime (NativeRegistry checks `manifest.IsAllowed` before every call)
-- [ ] Enforce at compile time (Semantic Analyzer) — needs `--manifest` plumbed into `cortex compile`
+- [x] Enforce at compile time (Semantic Analyzer) — `cortex compile <file> --manifest cortex.manifest.json`
 
 ### Android Companion App (`cortex-android/`)
 - [x] Kotlin project scaffold (Kotlin DSL Gradle)
@@ -174,7 +174,7 @@
 ---
 
 ## Post-MVP / Future Extensions
-- [ ] Wasm compilation target (compile Cortex AST → WebAssembly)
-- [ ] Visual scripting node editor outputting valid Cortex code
-- [ ] Distributed Cortex (serialize + execute scripts on edge servers)
-- [ ] Cortex Language Server Protocol (LSP) for IDE support
+- [x] Wasm compilation target (compile Cortex AST → WebAssembly) — `cortex compile <file> --emit=wat|wasm`
+- [x] Visual scripting node editor outputting valid Cortex code — `cortex-pwa/src/routes/nodes/+page.svelte`
+- [x] Distributed Cortex (serialize + execute scripts on edge servers) — HTTP `POST /execute` in daemon
+- [x] Cortex Language Server Protocol (LSP) for IDE support — `cortex-lsp` crate (`cortex-lsp` binary)
