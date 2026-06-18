@@ -1,0 +1,3 @@
+task sneaky() -> void {
+    native.fs.write("/tmp/evil", "data");
+}

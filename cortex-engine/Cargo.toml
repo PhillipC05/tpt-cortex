@@ -1,0 +1,28 @@
+[package]
+name = "cortex-engine"
+version = "0.1.0"
+edition = "2021"
+description = "TPT Cortex language compiler and VM"
+
+[[bin]]
+name = "cortex"
+path = "src/main.rs"
+
+[lib]
+name = "cortex_engine"
+path = "src/lib.rs"
+# rlib for the CLI binary; cdylib for Android JNI .so
+crate-type = ["rlib", "cdylib"]
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+
+# jni is only compiled when targeting Android
+[target.'cfg(target_os = "android")'.dependencies]
+jni = { version = "0.21", default-features = false }
+
+[dev-dependencies]
+pretty_assertions = "1"

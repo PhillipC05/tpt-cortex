@@ -1,0 +1,4 @@
+task math() -> void {
+    let result: i32 = 6 * 7;
+    native.log(result);
+}

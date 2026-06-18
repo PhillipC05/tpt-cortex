@@ -1,0 +1,113 @@
+(* TPT Cortex Language — Formal Grammar (EBNF) *)
+(* This file is the canonical source of truth for the parser. *)
+
+(* ─────────────────────────────────────────── *)
+(*  Top-level                                   *)
+(* ─────────────────────────────────────────── *)
+
+program     = { task_decl } ;
+
+task_decl   = "task" IDENT "(" [ param_list ] ")" "->" type_ann "{" block "}" ;
+
+param_list  = param { "," param } ;
+param       = IDENT ":" type_ann ;
+
+(* ─────────────────────────────────────────── *)
+(*  Types                                       *)
+(* ─────────────────────────────────────────── *)
+
+type_ann    = primitive_type
+            | "list" "<" type_ann ">"
+            | "map"  "<" type_ann "," type_ann ">"
+            | "void"
+            ;
+
+primitive_type = "i32" | "f64" | "string" | "bool" ;
+
+(* ─────────────────────────────────────────── *)
+(*  Statements                                  *)
+(* ─────────────────────────────────────────── *)
+
+block       = { stmt } ;
+
+stmt        = let_stmt
+            | if_stmt
+            | return_stmt
+            | expr_stmt
+            ;
+
+let_stmt    = "let" IDENT ":" type_ann "=" expr ";" ;
+
+if_stmt     = "if" expr "{" block "}"
+              [ "else" ( "{" block "}" | if_stmt ) ]
+            ;
+
+return_stmt = "return" [ expr ] ";" ;
+
+expr_stmt   = expr ";" ;
+
+(* ─────────────────────────────────────────── *)
+(*  Expressions (Pratt precedence)              *)
+(* ─────────────────────────────────────────── *)
+
+expr        = assignment ;
+
+assignment  = logical_or ;
+
+logical_or  = logical_and { "||" logical_and } ;
+
+logical_and = equality { "&&" equality } ;
+
+equality    = comparison { ( "==" | "!=" ) comparison } ;
+
+comparison  = addition { ( "<" | "<=" | ">" | ">=" ) addition } ;
+
+addition    = multiplication { ( "+" | "-" ) multiplication } ;
+
+multiplication = unary { ( "*" | "/" ) unary } ;
+
+unary       = ( "!" | "-" ) unary
+            | postfix
+            ;
+
+postfix     = primary { index_expr } ;
+
+index_expr  = "[" expr "]" ;
+
+primary     = INT_LIT
+            | FLOAT_LIT
+            | STRING_LIT
+            | "true"
+            | "false"
+            | IDENT [ call_args ]
+            | native_call
+            | "(" expr ")"
+            ;
+
+call_args   = "(" [ arg_list ] ")" ;
+arg_list    = expr { "," expr } ;
+
+(* native.fn(args) or native.namespace.fn(args) *)
+native_call = "native" "." IDENT { "." IDENT } call_args ;
+
+(* ─────────────────────────────────────────── *)
+(*  Terminals                                   *)
+(* ─────────────────────────────────────────── *)
+
+IDENT       = ALPHA { ALPHA | DIGIT | "_" } ;
+
+INT_LIT     = DIGIT { DIGIT } ;
+
+FLOAT_LIT   = DIGIT { DIGIT } "." DIGIT { DIGIT } ;
+
+STRING_LIT  = '"' { STRING_CHAR } '"' ;
+STRING_CHAR = any character except '"' and '\n'
+            | "\\" ( '"' | "\\" | "n" | "t" | "r" )
+            ;
+
+ALPHA       = "a" .. "z" | "A" .. "Z" | "_" ;
+DIGIT       = "0" .. "9" ;
+
+(* Whitespace and single-line comments are skipped *)
+WHITESPACE  = " " | "\t" | "\r" | "\n" ;
+COMMENT     = "//" { any character except "\n" } "\n" ;

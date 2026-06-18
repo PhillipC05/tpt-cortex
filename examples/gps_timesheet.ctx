@@ -1,0 +1,21 @@
+// GPS Timesheet demo — logs location fixes to local SQLite and syncs when online.
+//
+// Run via the PWA (cortex-pwa GPS Timesheet card) or directly:
+//   cortex run examples/gps_timesheet.ctx --allow=native.location.current,native.db.append,native.log
+
+task logFix() -> void {
+    let loc: string = native.location.current();
+    native.db.append("locations", loc);
+    native.log(loc);
+}
+
+task queryLog() -> void {
+    let rows: string = native.db.query("locations");
+    native.log(rows);
+}
+
+task scheduleTracking() -> void {
+    let script: string = "task tick() -> void { let loc: string = native.location.current(); native.db.append(\"locations\", loc); native.log(\"ticked\"); }";
+    native.schedule.add("*/30 * * * * *", script);
+    native.log("background GPS tracking started (every 30s)");
+}

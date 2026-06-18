@@ -1,0 +1,4 @@
+task hello() -> void {
+    let msg: string = "Hello, Cortex!";
+    native.log(msg);
+}
