@@ -1,0 +1,42 @@
+{
+  "version": "1",
+  "apps": {
+    "http://localhost:5173": {
+      "allow": [
+        "native.log",
+        "native.fs.read",
+        "native.notify",
+        "native.db.append",
+        "native.db.query",
+        "native.http.post",
+        "native.schedule.add",
+        "native.location.current"
+      ]
+    },
+    "http://127.0.0.1:5173": {
+      "allow": [
+        "native.log",
+        "native.fs.read",
+        "native.notify",
+        "native.db.append",
+        "native.db.query",
+        "native.http.post",
+        "native.schedule.add",
+        "native.location.current"
+      ]
+    },
+    "scheduler": {
+      "allow": [
+        "native.log",
+        "native.location.current",
+        "native.db.append",
+        "native.http.post"
+      ]
+    },
+    "*": {
+      "allow": [
+        "native.log"
+      ]
+    }
+  }
+}

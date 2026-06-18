@@ -1,0 +1,7 @@
+[workspace]
+members = [
+    "cortex-engine",
+    "cortex-lsp",
+    "cortex-shell",
+]
+resolver = "2"

@@ -1,0 +1,152 @@
+Executive Summary & Vision
+The Problem: Progressive Web Apps (PWAs) are artificially crippled by browser sandboxing. They lack true background execution, deep hardware access, and deterministic local-first capabilities. Traditional hybrid frameworks (React Native, Capacitor) rely on messy, string-based JavaScript bridges that lack type safety, suffer from performance bottlenecks, and are difficult to secure.
+The Solution: TPT Cortex is a custom, statically-typed Domain Specific Language (DSL) and lightweight Virtual Machine (VM) designed explicitly for secure, high-performance native bridging. It allows web applications to declare background tasks, hardware interactions, and local data operations in a safe, sandboxed environment, executed by a native host runtime.
+Core Value Proposition: Give PWAs native superpowers without sacrificing security, performance, or developer experience.
+2. High-Level System Architecture
+The TPT Cortex ecosystem consists of four distinct layers:
+The PWA Layer (Frontend): A standard web application (React, Svelte, SolidJS) running in a WebView. It writes Cortex scripts as strings or AST-JSON and sends them to the host.
+The IPC Bridge: A high-performance, type-safe Inter-Process Communication channel (e.g., JSON-RPC over WebSockets or native message passing) connecting the WebView to the Host.
+The Cortex Engine (Core): The custom language runtime. It receives the script, lexes, parses, type-checks, compiles to bytecode, and executes it within a sandboxed Virtual Machine.
+The Native Host (TPT Shell/Pulse): A lightweight native application (Rust/Go) that owns the WebView, runs the Cortex Engine, and provides the actual OS-level implementations for the native.* API calls (File I/O, Networking, Hardware).
+3. The Cortex Language Specification
+Cortex is not a general-purpose language; it is an orchestration and bridging DSL. It is statically typed, strongly sandboxed, and optimized for declarative task execution.
+3.1 Core Syntax & Features
+Static Typing: i32, f64, string, bool, list<T>, map<K, V>.
+First-Class Tasks: Background jobs are first-class citizens.
+Native Namespace: All OS interactions are strictly gated behind the native. namespace.
+3.2 Example Code
+cortex
+1234567891011121314151617181920212223
+4. Runtime & Virtual Machine Architecture
+The Cortex Engine is built in distinct compilation stages to ensure safety and performance.
+4.1 Compilation Pipeline
+Lexer (Tokenizer): Converts raw source code string into a stream of tokens (e.g., TASK, IDENTIFIER, STRING, NATIVE_DOT).
+Parser: Consumes tokens and builds an Abstract Syntax Tree (AST). Uses Recursive Descent or Pratt Parsing.
+Semantic Analyzer (Type Checker): Traverses the AST. Validates variable declarations, ensures type compatibility, and verifies that all native.* calls are on the allowed permission list.
+Bytecode Compiler: Translates the validated AST into a compact, stack-based bytecode format (e.g., PUSH_STRING, CALL_NATIVE, JUMP_IF_FALSE).
+4.2 The Virtual Machine (VM)
+Execution Model: Stack-based VM (simpler to implement and reason about than register-based for an MVP).
+Memory Management: Arena allocation or simple Reference Counting. No tracing Garbage Collector to prevent unpredictable pause times during execution.
+Execution Budgeting (The Sandbox): Every bytecode instruction costs "Ops". The VM is initialized with a maximum Op limit (e.g., 10,000 ops per task). If the limit is reached, the VM forcefully halts execution and returns a TimeoutError. This guarantees no infinite loops can freeze the host app.
+5. Security & Sandboxing Model
+Security is the primary differentiator between Cortex and raw JavaScript execution.
+Zero Arbitrary Execution: The VM cannot execute arbitrary host code. It can only invoke pre-registered, hardcoded native functions exposed by the Host.
+Permission Manifest: The Host app defines a manifest of allowed Cortex APIs. If a script tries to call native.fs.write but the manifest only allows native.fs.read, the Semantic Analyzer rejects it at compile time.
+Resource Limits:
+Max execution time (e.g., 500ms).
+Max memory allocation per VM instance (e.g., 10MB).
+Max string/byte array size (to prevent OOM attacks).
+No Dynamic Evaluation: Cortex does not have an eval() function. Code must be statically defined and compiled.
+6. Native Host Integration (The "Shell")
+The Host (written in Rust or Go) is responsible for bridging the Cortex VM to the actual operating system.
+IPC Handler: Listens for ExecuteCortex(script, context) messages from the WebView.
+API Registry: A dictionary mapping Cortex bytecode instructions to native functions.
+Example: OP_NATIVE_FS_READ triggers a Rust std::fs::read or Go os.ReadFile call.
+Daemon Mode (TPT Pulse): A background service that persists after the UI WebView is closed. It maintains a scheduler (e.g., robfig/cron in Go) that wakes up, spins up a lightweight Cortex VM, executes pending tasks, and goes back to sleep.
+7. Recommended Technology Stack
+Cortex Engine (Lexer, Parser, VM): Rust (for maximum performance, memory safety, and excellent parser combinators like Chumsky or Nom) OR Go (using Participle for parsing, leveraging its simplicity and fast compilation). Recommendation: Rust for the VM, Go for the Host Daemon.
+Native Host / Shell: Rust (using Tauri's WRY for cross-platform WebView management) or Go (using webview/webview).
+Frontend PWA: TypeScript + Svelte or SolidJS (minimal runtime overhead).
+Testing: Property-based testing for the Lexer/Parser to ensure edge cases in syntax are handled gracefully.
+8. Implementation Roadmap (Phased Approach)
+Phase 1: The Core Compiler (Weeks 1-3)
+Define the formal grammar of the Cortex language.
+Implement the Lexer and Parser. Output AST to JSON for debugging.
+Implement the Semantic Analyzer (Type Checker).
+Milestone: A CLI tool cortex compile input.ctx that outputs bytecode or rejects invalid code with precise line numbers.
+Phase 2: The Virtual Machine (Weeks 4-6)
+Define the Bytecode Instruction Set (e.g., PUSH, POP, ADD, CALL_NATIVE).
+Implement the Stack-based VM execution loop.
+Implement Execution Budgeting (Op counting and timeout enforcement).
+Milestone: The CLI tool can cortex run input.ctx and print the result of pure math/logic operations.
+Phase 3: Native Bridging & IPC (Weeks 7-9)
+Build the Native Host application with an embedded WebView.
+Implement the IPC bridge between JS and the Host.
+Register 3 core native APIs in the Host: native.log, native.fs.read, native.notify.
+Wire the Cortex VM to execute these native calls when the bytecode demands it.
+Milestone: A web button click triggers a Cortex script that successfully reads a local file and shows a desktop notification.
+Phase 4: The "Pulse" Daemon & Polish (Weeks 10-12)
+Implement the background scheduler in the Host.
+Add the Permission Manifest system for strict sandboxing.
+Build a demo PWA (e.g., a local-first note-taking app that uses Cortex to encrypt and sync notes in the background).
+Write comprehensive documentation and a stunning GitHub README.
+9. Future Extensions (Post-MVP)
+Wasm Compilation: Instead of a custom VM, compile Cortex AST directly to WebAssembly for near-native execution speed.
+Visual Scripting: Build a node-based UI editor that outputs valid Cortex code, making it accessible to non-programmers.
+Distributed Cortex: Allow Cortex scripts to be securely serialized and executed on edge servers, not just the local device.
+
+The "Invisible Engine" Architecture (TPT Core)
+Instead of building a massive "Shell" app, you build two distinct pieces:
+The PWA (The Face): A beautiful, standard web app that the user visits in Chrome, Firefox, or Safari. It requires zero installation.
+TPT Core (The Engine): A tiny (under 5MB), highly optimized native Android app that contains the Cortex VM, the background daemon, and the native API bridges.
+How They Connect Seamlessly: The Localhost Bridge
+When the user installs TPT Core, it silently starts a highly secure, local-only WebSocket server on the device (e.g., ws://127.0.0.1:9911).
+When the user opens your PWA in their normal browser, the PWA attempts to connect to that local WebSocket.
+If TPT Core is installed: The PWA instantly gains "Native Superpowers." It can send Cortex scripts to the local engine, which executes them and returns the results in milliseconds.
+If TPT Core is NOT installed: The PWA gracefully degrades. It just works like a normal website, but shows a beautifully designed, non-intrusive banner: "Unlock native background sync and hardware access. [Install TPT Core]".
+Why this is genius: The user never has to change their launcher. They never have to use a clunky in-app browser. They just use the web like normal, but the web suddenly has a native nervous system.
+How to Bypass Google’s Background Killing (Seamlessly)
+Google’s Android OS aggressively kills background apps to save battery. If TPT Core gets killed, the PWA loses its superpowers. Here is how you keep it alive seamlessly without annoying the user:
+1. The "Trojan Horse" Utility UI
+Don't just make TPT Core a blank settings app. Give it a beautiful, highly useful primary function. Make it a "System Dashboard," a "Privacy Firewall," or a "Local AI Hub." Because the user wants to open this app to see their stats or use its features, Android categorizes it as an "Active App" and is much less likely to kill it.
+2. The "One-Tap" Onboarding Wizard
+When the user first installs TPT Core, do not just show a list of permissions. Build a beautiful, 3-step onboarding wizard.
+Step 1: "Welcome to TPT Core."
+Step 2: "To keep your web apps synced in the background, we need to bypass battery optimization." -> The button says "Fix Battery Settings". When tapped, it uses an Android Intent to open the exact deep-linked settings page for your app, and the user just toggles "Unrestricted".
+Step 3: "Enable Smart Notifications." -> It requests permission to show a foreground service notification.
+The Trick: You make the Foreground Service notification highly stylized and dismissible, or you use Android's WorkManager (Google's officially blessed API for background tasks) to schedule Cortex executions, meaning Google's OS wants to keep your app alive.
+3. The Localhost Security Handshake
+Because TPT Core is running a local server, you must ensure a malicious website can't connect to it and steal data.
+When the PWA connects to ws://127.0.0.1:9911, TPT Core generates a temporary, cryptographically secure token.
+The PWA must present this token to execute any Cortex scripts. Because the token is stored in the PWA's local IndexedDB, only your specific PWA domain can execute commands on the engine.
+How to Solve the "Sideload Friction" Problem
+If you aren't on the Play Store, downloading and installing an APK can feel sketchy or manual to normal users. Here is how you make the distribution 100% seamless:
+1. The "Magic Link" Landing Page
+Create a beautiful website (e.g., tpt.dev/install). When a user visits this page on their Android phone, the site uses JavaScript to detect the OS. It automatically initiates the download of the TPT-Core.apk file.
+2. The Auto-Update Mechanism (Crucial)
+The biggest pain point of sideloading is that apps don't update automatically.
+Build an Auto-Updater directly into TPT Core.
+Every time the app opens, it pings your GitHub Releases API (or your own server) to check the version number.
+If a new version exists, it downloads the new APK in the background, and uses the Android ACTION_INSTALL_PACKAGE intent to prompt the user: "A new version of TPT Core is ready. Tap to update."
+To the user, it feels exactly like the Play Store updating an app in the background.
+3. "Obtainium" Integration
+For the power users who hate sideloading, format your GitHub releases to be compatible with Obtainium (a highly popular, open-source Android app that auto-updates APKs directly from GitHub). You can put a "Add to Obtainium" button on your website, which adds your repo to their app with one click.
+The Seamless User Journey (The Pitch)
+Imagine this is the demo you put on your portfolio or show to a recruiter:
+The Setup: You hand the recruiter an Android phone. There is no custom ROM. It's stock Android.
+The Web: You open Chrome and go to demo.tpt.dev. It’s a beautiful, local-first Note Taking PWA. You type a note. It saves locally.
+The Prompt: A sleek toast notification appears at the bottom: "TPT Core detected. Native background sync enabled."
+The Magic: You swipe the app away. You close Chrome completely. You open the phone's native settings and turn on "Airplane Mode" (simulating a lost connection).
+The Reveal: You open a terminal or a secondary dashboard app on the phone. You show that TPT Core (running silently in the background) successfully took the note, used the Cortex VM to encrypt it via native.crypto, and queued it. The moment you turn Airplane mode off, TPT Core instantly syncs it to the cloud.
+The Conclusion: You didn't write a native app. You didn't fork Android. You just wrote a website, and it has the power of a native app.
+Summary of the "Invisible Engine" Stack
+TPT Core (The Companion App): Kotlin or Rust (via Cargo NDK). Extremely small footprint. Hosts the Cortex VM, runs the Localhost WebSocket server, and manages Android WorkManager background tasks.
+The Cortex Engine: Written in Rust or Go, compiled down to an ARM64 binary, and bundled inside the TPT Core APK.
+The PWA: React, Svelte, or SolidJS. Connects to ws://127.0.0.1:9911.
+Distribution: Direct APK download via your website, with an internal Auto-Updater that checks GitHub Releases.
+
+The Flagship Use Case: Bulletproof GPS Timesheet Tracking
+The PWA Problem:
+If you build a standard GPS timesheet PWA, it works great while the screen is on. But the moment the user locks their phone or switches to another app, the mobile browser (Chrome/Safari) aggressively throttles or completely kills the JavaScript execution to save battery. The GPS stops logging. The timesheet has gaps. The data is unreliable, and employers reject it.
+The TPT Cortex Solution:
+You build a beautiful, lightweight PWA for the UI (clocking in/out, viewing maps). But the actual tracking logic is handed off to TPT Core (the Invisible Engine) via a Cortex script.
+The Cortex Script (Running in the Background Daemon):
+cortex
+123456789101112131415161718192021222324252627
+Why this is a massive win:
+No Browser Throttling: TPT Core uses Android’s native FusedLocationProvider or iOS background location APIs, which are explicitly designed by the OS to run reliably in the background.
+Offline-First Guarantee: Because native.db.append writes directly to a local file/SQLite DB on the device, a lost cell signal doesn't mean lost data. It syncs automatically when the connection returns.
+Battery Efficient: The Cortex VM executes the script, writes the data, and goes to sleep. It doesn't keep a heavy JavaScript engine or WebView alive in the background.
+🚀 3 Other Killer Use Cases for TPT Cortex
+Once you prove the GPS tracker, you can easily pivot this same architecture to solve other problems that standard PWAs cannot handle:
+1. Field Service & Offline-First Data Collection
+The Problem: Plumbers, inspectors, or delivery drivers often work in basements or rural areas with zero cell service. Web APIs for scanning barcodes or accessing the camera are slow and require constant network handshakes.
+The Cortex Solution: The PWA sends a Cortex script to TPT Core to activate the native camera for ultra-fast, continuous barcode/QR scanning (using native ML Kit), or to read NFC tags. The data is stored locally via native.db and synced via native.http the millisecond the device detects a network.
+2. Health & Fitness Continuous Monitoring
+The Problem: A web app cannot reliably read step counts, heart rate, or accelerometer data in the background for hours. The OS will kill the tab.
+The Cortex Solution: A fitness PWA hands a script to TPT Core that subscribes to the native Health Connect (Android) or HealthKit (iOS) APIs.
+cortex
+1234567
+3. Secure Enterprise "Local Vault"
+The Problem: Companies don't want sensitive documents (PDFs, contracts) passing through browser memory or temporary cache, where they could be intercepted or left behind on a shared device.
+The Cortex Solution: The PWA acts only as a viewer. When a user downloads a sensitive file, the PWA sends it to TPT Core. The Cortex engine uses native.crypto.encrypt to lock it with a device-specific key, saves it to a hidden, sandboxed directory, and deletes the plaintext from the browser's memory entirely.

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Cortex</string>
+    <string name="welcome_title">Welcome to Cortex</string>
+    <string name="welcome_subtitle">Cortex keeps your automation scripts running in the background, even when the browser is closed. This companion app powers native features like location tracking and local storage.</string>
+    <string name="get_started">Get Started</string>
+    <string name="battery_title">Battery Optimization</string>
+    <string name="battery_desc">To ensure Cortex scripts run reliably, please disable battery optimization for this app. This prevents Android from stopping the service in the background.</string>
+    <string name="disable_battery_optimization">Disable Battery Optimization</string>
+    <string name="battery_icon_desc">Battery icon</string>
+    <string name="permissions_title">Grant Permissions</string>
+    <string name="permissions_desc">Cortex needs location access to support native.location scripts, and notification permission to show its status in your notification bar.</string>
+    <string name="grant_permissions">Grant Permissions</string>
+    <string name="continue_text">Continue</string>
+    <string name="cortex_logo_desc">Cortex logo</string>
+    <string name="next">Next</string>
+    <string name="back">Back</string>
+    <string name="finish">Finish</string>
+    <string name="cortex_engine">Cortex Engine</string>
+    <string name="status_running">Running</string>
+    <string name="status_stopped">Stopped</string>
+    <string name="start_service">Start Service</string>
+    <string name="stop_service">Stop Service</string>
+    <string name="logs_label">Log Output</string>
+    <string name="notification_title">Cortex is running</string>
+    <string name="notification_text">Cortex scripts are active in the background</string>
+</resources>
