@@ -1,0 +1,26 @@
+# Rust
+target/
+Cargo.lock
+
+# Go
+cortex-daemon/vendor/
+*.exe
+
+# Node / Svelte
+cortex-pwa/node_modules/
+cortex-pwa/.svelte-kit/
+cortex-pwa/build/
+cortex-pwa/dist/
+
+# Android
+cortex-android/.gradle/
+cortex-android/build/
+cortex-android/local.properties
+*.apk
+*.aab
+
+# Editor
+.vscode/
+.idea/
+*.swp
+.DS_Store
